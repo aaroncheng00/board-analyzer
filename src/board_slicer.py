@@ -18,7 +18,7 @@ import numpy as np
 
 try:
     from slicer_config import SlicerConfig
-except ImportError:  # when imported as part of the `src` package
+except ImportError:
     from .slicer_config import SlicerConfig
 
 
@@ -36,8 +36,8 @@ def find_board_bbox(image, config=None):
 
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     edges = cv2.Canny(gray, cfg.bbox_canny_low, cfg.bbox_canny_high)
-    # Dilate edges slightly so broken/antialiased border lines connect into
-    # one continuous contour
+    # Dilate edges slightly so broken/antialiased border lines 
+    # connect into one continuous contour
     kernel = np.ones((cfg.bbox_dilate_kernel, cfg.bbox_dilate_kernel), np.uint8)
     edges = cv2.dilate(edges, kernel, iterations=cfg.bbox_dilate_iterations)
 
@@ -53,8 +53,7 @@ def find_board_bbox(image, config=None):
         if area < img_area * cfg.bbox_min_area_frac:
             continue
         aspect = w / h if h > 0 else 0
-        # Boards are usually close to square; allow some tolerance for
-        # rectangular boards (e.g. non-square puzzle grids)
+        # Accepted boards should be close to square
         sq = cfg.bbox_aspect_tol
         if sq <= aspect <= 1 / sq:
             candidates.append((area, x, y, w, h))
@@ -62,13 +61,13 @@ def find_board_bbox(image, config=None):
     if not candidates:
         raise ValueError("No board-like (square-ish, large) contour found")
 
-    # Pick the largest qualifying candidate
+    # Pick the candidate with largest area
     candidates.sort(reverse=True, key=lambda c: c[0])
     _, x, y, w, h = candidates[0]
     return x, y, w, h
 
 
-# Step 2: Detect grid lines within the board crop (works for any NxM size)
+# Step 2: Detect grid lines within the board crop
 def _cluster_positions(values, gap):
     """Group nearby line positions (Hough often reports the same physical
     line multiple times with slight pixel offsets) into single positions."""
@@ -89,8 +88,7 @@ def detect_grid_lines(board_image, config=None):
     Detect horizontal and vertical gridlines within a cropped board image.
 
     board_image: BGR image containing only the board
-    config: SlicerConfig -- uses the line_*, hough_*, cluster_*, angle_tol_deg
-        and min_line_frac fields; see slicer_config.py
+    config: SlicerConfig, see slicer_config.py
 
     The Hough vote threshold is not set directly: it is derived from the
     computed minLineLength as
@@ -203,10 +201,10 @@ def draw_debug_overlay(image, bbox, row_lines, col_lines):
     debug_img = image.copy()
     x, y, w, h = bbox
 
-    # board bounding box, in red
+    # board bounding box is red
     cv2.rectangle(debug_img, (x, y), (x + w, y + h), (0, 0, 255), 2)
 
-    # gridlines, in green -- drawn relative to the board crop, offset back
+    # gridlines are green and drawn relative to the board crop, offset back
     # into the original image's coordinate space
     for ry in row_lines:
         cv2.line(debug_img, (x, y + ry), (x + w, y + ry), (0, 255, 0), 1)
@@ -217,12 +215,11 @@ def draw_debug_overlay(image, bbox, row_lines, col_lines):
 
 
 # ---------------------------------------------------------------------------
-# Standalone CLI: run this file directly on an image to sanity-check the
-# whole pipeline. Saves every sliced cell as its own file, plus one debug
-# overlay image showing the detected bbox + gridlines on the original.
+# CLI
+# Save every sliced cell as its own file
+# Plus one debug overlay image showing the detected bbox + gridlines on the original.
 #
-# Every SlicerConfig field gets its own --flag automatically, so thresholds
-# can be tuned per-run without editing slicer_config.py.
+# Every SlicerConfig field gets its own --flag automatically
 #
 # Usage:
 #   python3 board_slicer.py path/to/screenshot.png
@@ -242,7 +239,6 @@ def _add_config_arguments(parser):
     for f in fields(SlicerConfig):
         flag = "--" + f.name.replace("_", "-")
         current = getattr(defaults, f.name)
-        # bool must be checked before int -- isinstance(True, int) is True
         if isinstance(current, bool):
             group.add_argument(flag, dest=f.name, default=current,
                                action=argparse.BooleanOptionalAction)
@@ -312,11 +308,7 @@ def main():
     cv2.imwrite(debug_path, debug_img)
     print(f"  saved debug overlay -> {debug_path}")
 
-    # Also save the raw Canny edge map that detect_grid_lines is working
-    # from -- if internal gridlines are missing HERE, the problem is edge
-    # detection (line_canny_* too strict for thin/light internal lines),
-    # not Hough line detection or clustering. Uses the same config values as
-    # detect_grid_lines so this map can never drift from what it actually sees.
+    # Save the raw Canny edge map that detect_grid_lines is working from
     gray = cv2.cvtColor(board_crop, cv2.COLOR_BGR2GRAY)
     edges = cv2.Canny(gray, cfg.line_canny_low, cfg.line_canny_high)
     edges_path = os.path.join(args.out, "03_canny_edges.png")

@@ -118,7 +118,7 @@ def build_eval_transform(config=None):
 
 class BoardCellNet(nn.Module):
     """
-    Frozen feature extractor + trainable classification head.
+    Frozen feature extractor + trainable classification head for board cells.
     """
 
     def __init__(self, backbone, head, freeze_backbone=True):
@@ -129,14 +129,6 @@ class BoardCellNet(nn.Module):
 
     def train(self, mode=True):
         """Put the module in training mode, but hold a frozen backbone in eval.
-
-        requires_grad=False stops gradients, but it does NOT stop BatchNorm from
-        updating running_mean / running_var: those are buffers, not parameters,
-        and they are rewritten on every forward pass while the module is in
-        training mode. shufflenet_v2_x0_5 has 56 BatchNorm modules, so an
-        otherwise "frozen" backbone silently mutates 168 buffers per run --
-        replacing ImageNet statistics with estimates from ~150 board cells, and
-        degrading the very features we are relying on being fixed.
 
         Keeping the backbone in eval() makes "frozen" actually mean frozen.
         """
@@ -153,16 +145,9 @@ def build_model(config=None, num_classes=None):
     """
     Build a BoardCellNet for `num_classes` categories.
 
-    The ImageNet head is replaced with nn.Identity and the resulting feature
-    width is then measured with a dummy forward pass, rather than hardcoded per
-    architecture -- that measurement is what makes swapping backbones a
-    one-line change.
+    Replace the backbone head with nn.Identity to measure feature width
 
     Returns (model, feature_dim).
-
-    NOTE: the head ends in a bare nn.Linear and emits raw logits. Do not append
-    a softmax: nn.CrossEntropyLoss applies log_softmax itself, and adding one
-    here degrades training silently rather than raising.
     """
     cfg = config or ModelConfig()
     if num_classes is None:
@@ -200,8 +185,8 @@ def _require_known(arch):
 
 
 # ---------------------------------------------------------------------------
-# Standalone check: build the model and report what came out. Touches no data
-# and trains nothing -- this is the sanity check for a new BACKBONES entry.
+# Standalone check: build the model and report what came out. 
+# Touches no data and trains nothing.
 #
 #   python3 src/model.py
 #   python3 src/model.py --arch shufflenet_v2_x0_5 --input-size 96

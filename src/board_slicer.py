@@ -160,8 +160,9 @@ def detect_grid_lines(board_image, config=None):
 def slice_cells(board_image, row_lines, col_lines):
     """
     Crop out each cell using detected gridline positions.
-
+    
     Returns a dict {(row, col): cell_image}, 0-indexed from top-left.
+    Emits cells in BGR (not RGB)
     """
     cells = {}
     num_rows = len(row_lines) - 1

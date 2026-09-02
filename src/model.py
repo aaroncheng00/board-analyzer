@@ -10,6 +10,7 @@ Requires: pip install torch torchvision
 
 from dataclasses import dataclass
 
+import numpy as np
 import torch
 import torch.nn as nn
 import torchvision.transforms as T
@@ -89,6 +90,31 @@ class PadToSquare:
         )
         # median per channel -- robust to a few outlier pixels on the border
         return tuple(sorted(c[i] for c in edge)[len(edge) // 2] for i in range(3))
+
+
+def bgr_array_to_pil(cell):
+    """
+    Convert a cv2/numpy BGR crop into a PIL RGB image.
+    
+    Return (3, H, W) RGB tensor
+    """
+    if not isinstance(cell, np.ndarray):
+        raise ValueError(f"expected a numpy array, got {type(cell).__name__}")
+    if cell.ndim != 3 or cell.shape[2] != 3:
+        raise ValueError(
+            f"expected an (H, W, 3) BGR array, got shape {cell.shape}"
+        )
+    if cell.size == 0:
+        raise ValueError(
+            f"empty cell crop (shape {cell.shape}) means two detected gridlines "
+            "likely landed on the same coordinate, inspect sliced output"
+        )
+    if cell.dtype != np.uint8:
+        raise ValueError(f"expected uint8 pixel data, got dtype {cell.dtype}")
+
+    # [:, :, ::-1] leaves negative strides. Pillow accepts those directly, so
+    # the reflexive np.ascontiguousarray() copy is pure cost here.
+    return Image.fromarray(cell[:, :, ::-1])
 
 
 def backbone_normalization(arch):

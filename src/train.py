@@ -25,6 +25,7 @@ from model import (
     backbone_normalization,
     build_eval_transform,
     build_model,
+    pick_device,
 )
 
 DEFAULT_TRAIN_ROOT = "data/train/cells"
@@ -56,16 +57,6 @@ def _config_from_args(args, config_cls):
     values = {f.name: getattr(args, f.name) for f in fields(config_cls)}
     overrides = {k: v for k, v in values.items() if v != getattr(defaults, k)}
     return config_cls(**values), overrides
-
-
-def pick_device(requested=None):
-    if requested:
-        return torch.device(requested)
-    if torch.cuda.is_available():
-        return torch.device("cuda")
-    if torch.backends.mps.is_available():
-        return torch.device("mps")
-    return torch.device("cpu")
 
 
 def load_datasets(train_root, val_root, model_cfg):

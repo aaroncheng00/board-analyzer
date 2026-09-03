@@ -95,8 +95,6 @@ class PadToSquare:
 def bgr_array_to_pil(cell):
     """
     Convert a cv2/numpy BGR crop into a PIL RGB image.
-    
-    Return (3, H, W) RGB tensor
     """
     if not isinstance(cell, np.ndarray):
         raise ValueError(f"expected a numpy array, got {type(cell).__name__}")
@@ -140,6 +138,16 @@ def build_eval_transform(config=None):
         T.ToTensor(),
         T.Normalize(mean=mean, std=std),
     ])
+
+
+def pick_device(requested=None):
+    if requested:
+        return torch.device(requested)
+    if torch.cuda.is_available():
+        return torch.device("cuda")
+    if torch.backends.mps.is_available():
+        return torch.device("mps")
+    return torch.device("cpu")
 
 
 class BoardCellNet(nn.Module):

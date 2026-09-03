@@ -16,7 +16,7 @@ from dataclasses import asdict, fields
 
 import torch
 import torch.nn as nn
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, TensorDataset
 from torchvision import datasets
 
 from model import (
@@ -79,7 +79,8 @@ def load_datasets(train_root, val_root, model_cfg):
 
 
 def run_epoch(model, loader, loss_fn, device, optimizer=None):
-    """One pass over `loader`. Trains when an optimizer is given, else evaluates.
+    """
+    One pass over `loader`. Trains when an optimizer is given, else evaluates.
 
     Returns (mean_loss, accuracy).
     """
@@ -104,6 +105,75 @@ def run_epoch(model, loader, loss_fn, device, optimizer=None):
             seen += labels.size(0)
 
     return total_loss / max(seen, 1), correct / max(seen, 1)
+
+
+def extract_features(model, dataset, batch_size, device):
+    """
+    Run the frozen backbone over a dataset once and keep the features.
+
+    Valid only while the backbone is frozen.
+
+    Returns a TensorDataset of (features, label)
+    """
+    model.eval()
+    feats, labels = [], []
+    with torch.no_grad():
+        for images, targets in DataLoader(dataset, batch_size=batch_size):
+            feats.append(model.backbone(images.to(device)).cpu())
+            labels.append(targets)
+    return TensorDataset(torch.cat(feats), torch.cat(labels))
+
+
+def per_class_report(module, loader, classes, device):
+    """
+    Accuracy broken down by class, worst first.
+    """
+    module.eval()
+    correct = [0] * len(classes)
+    total = [0] * len(classes)
+    with torch.no_grad():
+        for inputs, targets in loader:
+            preds = module(inputs.to(device)).argmax(dim=1).cpu()
+            for t, p in zip(targets.tolist(), preds.tolist()):
+                total[t] += 1
+                correct[t] += int(t == p)
+
+    rows = sorted(
+        ((correct[i] / total[i] if total[i] else 0.0, classes[i], correct[i], total[i])
+         for i in range(len(classes))),
+        key=lambda r: (r[0], -r[3]),
+    )
+    print(f"\nper-class validation accuracy (worst first)")
+    print(f"  {'class':<24}{'n':>5}{'correct':>9}{'acc':>8}")
+    for acc, name, ok, n in rows:
+        flag = "  <-" if acc < 1.0 else ""
+        print(f"  {name:<24}{n:>5}{ok:>9}{acc:>8.2f}{flag}")
+    print(f"  {'TOTAL':<24}{sum(total):>5}{sum(correct):>9}"
+          f"{sum(correct)/max(sum(total),1):>8.3f}")
+
+
+def warn_split_imbalance(train_ds, val_ds):
+    """
+    Flag classes with at least as many validation as training images.
+    """
+    tr = [0] * len(train_ds.classes)
+    va = [0] * len(val_ds.classes)
+    for _, t in train_ds.samples:
+        tr[t] += 1
+    for _, t in val_ds.samples:
+        va[t] += 1
+
+    bad = [(train_ds.classes[i], tr[i], va[i])
+           for i in range(len(tr)) if va[i] >= tr[i]]
+    if not bad:
+        return
+    print(f"WARNING  {len(bad)} of {len(tr)} classes have >= as many val as train "
+          f"images, so val accuracy is optimistic:")
+    for name, t, v in sorted(bad, key=lambda b: b[1] - b[2])[:8]:
+        print(f"           {name:<24} {t:>3} train / {v:>3} val")
+    if len(bad) > 8:
+        print(f"           ... and {len(bad) - 8} more")
+    print()
 
 
 def save_checkpoint(path, model, classes, model_cfg):
@@ -143,9 +213,13 @@ def main():
     torch.manual_seed(train_cfg.seed)
     device = pick_device(args.device)
 
+    if train_cfg.cache_features and not model_cfg.freeze_backbone:
+        raise ValueError(
+            "cache_features requires freeze_backbone." \
+            " Pass --no-cache-features to train the backbone."
+        )
+
     train_ds, val_ds = load_datasets(args.train_root, args.val_root, model_cfg)
-    train_loader = DataLoader(train_ds, batch_size=train_cfg.batch_size, shuffle=True)
-    val_loader = DataLoader(val_ds, batch_size=train_cfg.batch_size, shuffle=False)
 
     model, feature_dim = build_model(model_cfg, len(train_ds.classes))
     model.to(device)
@@ -164,16 +238,34 @@ def main():
     print(f"images        {len(train_ds)} train / {len(val_ds)} val")
     print(f"trainable     {sum(p.numel() for p in trainable):,} params "
           f"of {sum(p.numel() for p in model.parameters()):,}")
+    print(f"cached feats  {train_cfg.cache_features}")
     overrides = {**model_over, **train_over}
     print(f"overrides     {overrides if overrides else 'none (all defaults)'}")
     print()
 
+    warn_split_imbalance(train_ds, val_ds)
+
+    # With cached features the head trains directly on backbone outputs, so the
+    # module passed to run_epoch is model.head rather than the whole model
+    if train_cfg.cache_features:
+        train_data = extract_features(model, train_ds, train_cfg.batch_size, device)
+        val_data = extract_features(model, val_ds, train_cfg.batch_size, device)
+        module = model.head
+    else:
+        train_data, val_data, module = train_ds, val_ds, model
+
+    train_loader = DataLoader(train_data, batch_size=train_cfg.batch_size, shuffle=True)
+    val_loader = DataLoader(val_data, batch_size=train_cfg.batch_size, shuffle=False)
+
     for epoch in range(1, train_cfg.epochs + 1):
-        train_loss, train_acc = run_epoch(model, train_loader, loss_fn, device, optimizer)
-        val_loss, val_acc = run_epoch(model, val_loader, loss_fn, device)
-        print(f"  epoch {epoch:>4}/{train_cfg.epochs}   "
-              f"loss {train_loss:.4f}   train_acc {train_acc:.3f}   "
-              f"val_loss {val_loss:.4f}   val_acc {val_acc:.3f}")
+        train_loss, train_acc = run_epoch(module, train_loader, loss_fn, device, optimizer)
+        val_loss, val_acc = run_epoch(module, val_loader, loss_fn, device)
+        if epoch % max(1, train_cfg.epochs // 20) == 0 or epoch == train_cfg.epochs:
+            print(f"  epoch {epoch:>4}/{train_cfg.epochs}   "
+                  f"loss {train_loss:.4f}   train_acc {train_acc:.3f}   "
+                  f"val_loss {val_loss:.4f}   val_acc {val_acc:.3f}")
+
+    per_class_report(module, val_loader, train_ds.classes, device)
 
     save_checkpoint(train_cfg.out_path, model, train_ds.classes, model_cfg)
     print(f"\nsaved checkpoint -> {train_cfg.out_path}")

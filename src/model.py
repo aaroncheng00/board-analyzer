@@ -61,6 +61,8 @@ class TrainConfig:
                                         # examples per class
     seed: int = 0
     out_path: str = "models/board_cnn.pt"
+    cache_features: bool = True        # frozen backbone + deterministic
+                                        # transform means pre-compute features for each input once
 
 
 class PadToSquare:

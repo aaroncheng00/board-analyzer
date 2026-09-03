@@ -83,6 +83,17 @@ def _cluster_positions(values, gap):
     return [int(np.mean(c)) for c in clusters]
 
 
+def _uniform_positions(lines):
+    """
+    Keep the number of detected lines, but respace them evenly.
+
+    Assumes cells are equally sized and square.
+    """
+    if len(lines) < 3:
+        return lines 
+    return [int(round(v)) for v in np.linspace(lines[0], lines[-1], len(lines))]
+
+
 def detect_grid_lines(board_image, config=None):
     """
     Detect horizontal and vertical gridlines within a cropped board image.
@@ -90,10 +101,7 @@ def detect_grid_lines(board_image, config=None):
     board_image: BGR image containing only the board
     config: SlicerConfig, see slicer_config.py
 
-    The Hough vote threshold is not set directly: it is derived from the
-    computed minLineLength as
-        max(hough_threshold_min, min_line_length * hough_threshold_frac)
-    so that it scales with board size.
+    The Hough vote threshold is derived from the computed minLineLength
 
     Returns (row_lines, col_lines), both sorted in ascending order
     """
@@ -152,6 +160,10 @@ def detect_grid_lines(board_image, config=None):
     # Re-cluster after inserting fallback boundaries
     row_lines = _cluster_positions(row_lines, gap=cluster_gap)
     col_lines = _cluster_positions(col_lines, gap=cluster_gap)
+
+    if cfg.uniform_spacing:
+        row_lines = _uniform_positions(row_lines)
+        col_lines = _uniform_positions(col_lines)
 
     return row_lines, col_lines
 

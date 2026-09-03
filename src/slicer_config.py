@@ -32,21 +32,30 @@ class SlicerConfig:
     line_run_frac: float = 0.8         # a detected segment must span at least
                                         # this fraction of min_line_length
                                         # along its own axis to be counted
-    hough_threshold_frac: float = 0.4  # hough_threshold auto-derived as
+    hough_threshold_frac: float = 0.05 # hough_threshold auto-derived as
                                         # max(hough_threshold_min,
-                                        #     min_line_length * this)
-    hough_threshold_min: int = 20
+                                        #     min_line_length * this).
+                                        # Was 0.4, which detected 13 rows on an
+                                        # 8x8 chessboard: piece artwork produces
+                                        # extra horizontal edge runs, and a high
+                                        # threshold changes which segments Hough
+                                        # extracts (it consumes edge pixels as
+                                        # it goes, so the response is not
+                                        # monotonic). 0.02-0.15 is a broad
+                                        # plateau where both test boards come
+                                        # out correct; 0.05 sits inside it
+    hough_threshold_min: int = 20      # in practice THIS is the binding value:
+                                        # at frac=0.05 the derived term is ~13
+                                        # (chess) and ~7 (tango), so the floor
+                                        # wins on both. Tune this rather than
+                                        # the fraction above
     cluster_gap_frac: float = 0.02     # nearby detected line positions
                                         # within this fraction of board size
                                         # get merged into one
     cluster_gap_min: int = 4           # floor for the above, in pixels
-    uniform_spacing: bool = True       # NOT YET IMPLEMENTED -- placeholder for
-                                        # recomputing final line positions by
-                                        # even division once the COUNT of
-                                        # detected lines is known, rather than
-                                        # trusting individual detected positions
-                                        # (would help with piece/icon artwork
-                                        # corrupting position, but NOT count).
-                                        # A grid-size override that skips
-                                        # inference entirely would be the fully
-                                        # robust fix; neither is built yet
+    uniform_spacing: bool = True       # respace the detected lines evenly once
+                                        # their COUNT is known, instead of
+                                        # trusting individual positions. A
+                                        # grid-size override that skips
+                                        # inference entirely is the fully
+                                        # robust fix and is not built

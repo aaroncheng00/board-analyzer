@@ -65,3 +65,7 @@ runs/
 lightning_logs/
 wandb/
 mlruns/
+
+# Generated training composites (reproducible via src/generate_composites.py)
+data/**/gen_*.png
+pipeline_output/

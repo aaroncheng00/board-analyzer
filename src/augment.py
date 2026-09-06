@@ -100,34 +100,68 @@ def jitter_color(bgr, rng=None, hue=0.03, sat=0.12, val=0.10):
     return tuple(int(round(c * 255)) for c in (b, g, r))
 
 
-def composite_sprite(rgba, bg_color, size=128, scale=0.85, offset=(0, 0)):
+def crop_to_content(rgba, alpha_threshold=128):
+    """
+    Tight-crop an RGBA sprite to its alpha bounding box.
+
+    Sprite canvases carry a lot of dead space: Chess_pdt45 is 62% padding, the
+    pawn occupying a 70x90 box inside a 128x128 canvas. Scaling the canvas
+    therefore shrinks the piece far more than intended -- composites had the
+    piece covering 0.18 of the cell against 0.31 measured on a real board, and
+    black pawns were the classes still failing. Cropping first makes `scale`
+    refer to the piece instead of to its padding.
+    """
+    mask = rgba[:, :, 3] > alpha_threshold
+    if not mask.any():
+        return rgba
+    ys, xs = np.where(mask)
+    return rgba[ys.min():ys.max() + 1, xs.min():xs.max() + 1]
+
+
+def composite_sprite(rgba, bg_color, size=128, scale=0.70, offset=(0, 0),
+                     crop=True):
     """
     Alpha-composite an RGBA sprite onto a solid square.
 
     rgba:     (H, W, 4) uint8, as cv2.imread(..., IMREAD_UNCHANGED) returns
     bg_color: BGR triple for the square behind the piece
-    scale:    fraction of the cell the sprite occupies.
+    scale:    fraction of the cell spanned by the piece's LONGER side. Aspect
+              ratio is preserved, so a tall thin pawn stays tall and thin
+              rather than being squashed into a square.
+
+              Tuned empirically, NOT set to match the real board. Measured
+              coverage on a real chess_1 cell is 0.313, and scale=0.80 (which
+              reproduces that at 0.295) scored WORSE than 0.70 -- 44/64 against
+              47/64 on the end-to-end board test, identically across 3 seeds.
+              Matching the true piece size is not what this model wants.
     offset:   (dx, dy) in pixels, for a little positional variation
+    crop:     tight-crop to the alpha bounding box first, so `scale` refers to
+              the piece rather than the sprite's padded canvas
 
     Returns a (size, size, 3) BGR image.
     """
     if rgba.ndim != 3 or rgba.shape[2] != 4:
         raise ValueError(f"expected an (H, W, 4) RGBA sprite, got shape {rgba.shape}")
 
+    if crop:
+        rgba = crop_to_content(rgba)
+
     canvas = np.full((size, size, 3), bg_color, dtype=np.uint8)
 
-    side = max(1, int(round(size * scale)))
-    sprite = cv2.resize(rgba, (side, side), interpolation=cv2.INTER_AREA)
+    h, w = rgba.shape[:2]
+    factor = size * scale / max(h, w)
+    new_w = max(1, min(size, int(round(w * factor))))
+    new_h = max(1, min(size, int(round(h * factor))))
+    sprite = cv2.resize(rgba, (new_w, new_h), interpolation=cv2.INTER_AREA)
+
     fg = sprite[:, :, :3].astype(np.float32)
     alpha = (sprite[:, :, 3:4].astype(np.float32)) / 255.0
 
-    x0 = (size - side) // 2 + offset[0]
-    y0 = (size - side) // 2 + offset[1]
-    x0 = max(0, min(size - side, x0))
-    y0 = max(0, min(size - side, y0))
+    x0 = max(0, min(size - new_w, (size - new_w) // 2 + offset[0]))
+    y0 = max(0, min(size - new_h, (size - new_h) // 2 + offset[1]))
 
-    region = canvas[y0:y0 + side, x0:x0 + side].astype(np.float32)
-    canvas[y0:y0 + side, x0:x0 + side] = (
+    region = canvas[y0:y0 + new_h, x0:x0 + new_w].astype(np.float32)
+    canvas[y0:y0 + new_h, x0:x0 + new_w] = (
         alpha * fg + (1.0 - alpha) * region
     ).round().astype(np.uint8)
     return canvas

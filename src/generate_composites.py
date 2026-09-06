@@ -2,23 +2,14 @@
 """
 Composite transparent sprites onto realistic square colours.
 
-Fixes a data bug. The chess and queens sprites are stored with transparent
-backgrounds; PIL's convert("RGB") drops alpha and keeps the underlying RGB,
-which is (0,0,0) in these files. Dark pieces therefore became solid black
-squares carrying no information -- chess_black_pawn and queens_black_crown both
-measured zero content, and queens_black_crown had no other training image.
+Fixes a data bug where missing alpha is converted to black.
+Dark pieces can incorrectly map to dark backgrounds losing information.
 
-Sources are the raw art in assets/icons/ and are never written to or deleted;
-output goes to data/train/cells/<class>/gen_*.png, which ImageFolder picks up
-with no code change. That keeps the one-way flow intact:
+Output goes to data/train/cells/<class>/gen_*.png
 
-    assets/  (raw art)  ->  this script  ->  data/  (training images)
+Flow: assets/  (raw art)  ->  this script  ->  data/  (training images)
 
-The chess PNGs there are rendered from the SVGs beside them at 128px via
-svg_to_png.py, so compositing no longer upscales a 45px raster.
-
-Regenerating is always safe: --clean removes only gen_* outputs, and the
-sources are somewhere else entirely.
+Regenerating with --clean removes only gen_* outputs, not sources.
 
 Usage:
     python3 src/generate_composites.py --dry-run
@@ -71,10 +62,16 @@ _EXPLICIT = {
 
 
 def sprite_class(filename):
-    """Map a source filename in assets/icons to a dataset class, or None."""
+    """
+    Map a source filename in assets/icons to a dataset class, or None.
+
+    Only PNG is recognised. Render SVG first with svg_to_png.py.
+    """
+    stem, ext = os.path.splitext(filename)
+    if ext.lower() != ".png":
+        return None
     if filename in _EXPLICIT:
         return _EXPLICIT[filename]
-    stem = os.path.splitext(filename)[0]
     if stem.startswith("Chess_") and stem.endswith("t45"):
         code = stem[len("Chess_"):-len("45")]        # e.g. "pdt"
         if len(code) == 3 and code[0] in _PIECE and code[1] in "ld":
@@ -86,21 +83,23 @@ def find_sprites(sprite_dir):
     """
     Alpha-bearing sprites, as (class_name, path) pairs.
 
-    Class comes from sprite_class(); files it does not recognise are reported
-    rather than silently dropped, so a new sprite that needs a mapping entry is
-    visible instead of quietly absent from training.
+    Class comes from sprite_class(). 
+    A file missing a class mapping is reported.
     """
     found, skipped = [], []
     for path in sorted(glob.glob(os.path.join(sprite_dir, "*.png"))):
         base = os.path.basename(path)
-        cls = sprite_class(base)
-        if cls is None:
-            continue                       # screenshots and other loose art
         img = cv2.imread(path, cv2.IMREAD_UNCHANGED)
-        if not has_alpha(img):
-            skipped.append((base, "no usable alpha channel"))
-            continue
-        found.append((cls, path))
+        alpha = has_alpha(img)
+        cls = sprite_class(base)
+
+        if cls is not None and alpha:
+            found.append((cls, path))
+        elif cls is not None:
+            skipped.append((base, "mapped to a class but has no usable alpha"))
+        elif alpha:
+            skipped.append((base, "HAS ALPHA but no class mapping -- add it to "
+                                  "_EXPLICIT or follow the Chess_*t45 convention"))
     return found, skipped
 
 
@@ -108,11 +107,6 @@ def build_backgrounds(sample_from, count, rng_seed=0):
     """
     Square colours to composite onto: sampled first, then the curated palette,
     then jittered repeats once both are exhausted.
-
-    Sampling a real board beats any hardcoded value -- chess_1's dark square
-    measures #698A4E against the commonly quoted #769656 -- but one screenshot
-    gives one theme, so the palette supplies the variety that stops the model
-    simply overfitting to green instead of tan.
     """
     rng = random.Random(rng_seed)
     colors = {}
@@ -141,7 +135,7 @@ def main():
     parser.add_argument("--count", type=int, default=6,
                         help="Background colours per sprite")
     parser.add_argument("--size", type=int, default=128)
-    parser.add_argument("--scale", type=float, default=0.85,
+    parser.add_argument("--scale", type=float, default=0.70,
                         help="Fraction of the cell the sprite occupies")
     parser.add_argument("--sample-from", action="append", default=None,
                         metavar="BOARD_PNG",
@@ -150,6 +144,9 @@ def main():
     parser.add_argument("--clean", action="store_true",
                         help=f"Remove existing {GEN_PREFIX}* outputs first. Only ever "
                              f"touches generated files, never the sources.")
+    parser.add_argument("--crop", action=argparse.BooleanOptionalAction, default=True,
+                        help="Tight-crop sprites to their alpha bbox before scaling, so "
+                             "--scale refers to the piece and not its padding")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
 
@@ -189,7 +186,7 @@ def main():
         for bg_name, bg in backgrounds.items():
             out = os.path.join(class_dir, f"{GEN_PREFIX}{stem}_{bg_name}.png")
             if not args.dry_run:
-                cv2.imwrite(out, composite_sprite(rgba, bg, args.size, args.scale))
+                cv2.imwrite(out, composite_sprite(rgba, bg, args.size, args.scale, crop=args.crop))
             written += 1
 
     for c in sorted(set(missing)):

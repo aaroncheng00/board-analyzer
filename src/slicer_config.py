@@ -68,8 +68,21 @@ class SlicerConfig:
                                         # switchable so the two stay comparable
     profile_n_min: int = 3             # cell-count search range
     profile_n_max: int = 20
-    profile_peak_tol: int = 2          # px window when sampling a predicted
-                                        # boundary, for rounding/anti-aliasing
+    profile_peak_tol_frac: float = 0.04 # window when sampling a predicted
+                                        # boundary, as a fraction of CELL size,
+                                        # absorbing rounding and inset borders.
+                                        # Relative rather than fixed px because
+                                        # cells range 70-180px here: a flat 2px
+                                        # is 2.9% of a tango cell but 1.1% of a
+                                        # chess_2 one. It was 2px, and queens_1
+                                        # failed outright -- its bbox includes
+                                        # the grid's outer border, so the
+                                        # interior is inset and an even division
+                                        # drifts ~2.8px at the first and last
+                                        # boundary. Those two read exactly 0.0,
+                                        # the percentile picked one up, and
+                                        # every N scored ~0.003
+    profile_peak_tol_min: int = 2      # floor in px, for very small cells
     profile_percentile: float = 20.0   # how the per-boundary strengths are
                                         # aggregated into one score for a
                                         # candidate N. 100 = max, 50 = median,

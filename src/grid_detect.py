@@ -53,20 +53,31 @@ def boundary_profile(board_image, axis):
     return raw, contrast
 
 
-def score_grid(profile, n_cells, tol=2, percentile=20.0):
+def peak_tolerance(n_cells, span, tol_frac=0.04, tol_min=2):
+    """
+    Search window, in px, when sampling a predicted boundary.
+
+    Scaled to cell size rather than fixed.
+    """
+    if n_cells < 1:
+        return tol_min
+    return max(tol_min, int(round(span / n_cells * tol_frac)))
+
+
+def score_grid(profile, n_cells, tol_frac=0.04, percentile=20.0, tol_min=2):
     """
     How well a uniform division into `n_cells` explains the profile.
 
-    Samples the profile at each of the n_cells-1 interior boundaries used by a uniform grid.
-    Take the max within +/- tol px to absorb rounding and anti-aliasing.
-
-    Determine final score with `percentile`.
+    Samples the profile at each of the n_cells-1 interior boundaries used by a
+    uniform grid, taking the max within a window scaled to cell size (see
+    peak_tolerance), then aggregates with `percentile`.
 
     `profile` should be normalised to 0..1 so scores are comparable across axes.
     """
     n = len(profile)
     if n_cells < 2:
         return 0.0
+    tol = peak_tolerance(n_cells, n, tol_frac, tol_min)
     peaks = []
     for i in range(1, n_cells):
         b = int(round(i * n / n_cells))
@@ -98,7 +109,8 @@ def infer_axis_size(board_image, axis, config=None):
 
     profile = (raw - raw.min()) / (raw.max() - raw.min() + 1e-9)
     scores = {
-        n: score_grid(profile, n, cfg.profile_peak_tol, cfg.profile_percentile)
+        n: score_grid(profile, n, cfg.profile_peak_tol_frac,
+                      cfg.profile_percentile, cfg.profile_peak_tol_min)
         for n in range(cfg.profile_n_min, cfg.profile_n_max + 1)
     }
 

@@ -83,15 +83,19 @@ def _cluster_positions(values, gap):
     return [int(np.mean(c)) for c in clusters]
 
 
-def _uniform_positions(lines):
+def _uniform_positions(lines, span=None):
     """
     Keep the number of detected lines, but respace them evenly.
 
     Assumes cells are equally sized and square.
+
+    span: total extent to divide, i.e. the board dimension. When given, the
+    grid is anchored to 0..span rather than to the outermost detected lines.
     """
     if len(lines) < 3:
-        return lines 
-    return [int(round(v)) for v in np.linspace(lines[0], lines[-1], len(lines))]
+        return lines
+    lo, hi = (0, span) if span is not None else (lines[0], lines[-1])
+    return [int(round(v)) for v in np.linspace(lo, hi, len(lines))]
 
 
 def detect_grid_lines(board_image, config=None):
@@ -162,8 +166,10 @@ def detect_grid_lines(board_image, config=None):
     col_lines = _cluster_positions(col_lines, gap=cluster_gap)
 
     if cfg.uniform_spacing:
-        row_lines = _uniform_positions(row_lines)
-        col_lines = _uniform_positions(col_lines)
+        # anchored on the board crop (h, w), not on the outermost detected
+        # lines -- see _uniform_positions for why that matters
+        row_lines = _uniform_positions(row_lines, span=h)
+        col_lines = _uniform_positions(col_lines, span=w)
 
     return row_lines, col_lines
 

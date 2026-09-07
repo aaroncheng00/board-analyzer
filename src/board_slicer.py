@@ -17,8 +17,10 @@ import cv2
 import numpy as np
 
 try:
+    from grid_detect import detect_grid_lines_by_profile
     from slicer_config import SlicerConfig
 except ImportError:
+    from .grid_detect import detect_grid_lines_by_profile
     from .slicer_config import SlicerConfig
 
 
@@ -110,6 +112,16 @@ def detect_grid_lines(board_image, config=None):
     Returns (row_lines, col_lines), both sorted in ascending order
     """
     cfg = config or SlicerConfig()
+
+    if cfg.grid_detector == "profile":
+        # Periodicity-based. Returns uniformly divided positions from the
+        # inferred cell count, so uniform_spacing is implicit and ignored here.
+        return detect_grid_lines_by_profile(board_image, cfg)
+    if cfg.grid_detector != "hough":
+        raise ValueError(
+            f"unknown grid_detector {cfg.grid_detector!r}; expected "
+            f"'profile' or 'hough'"
+        )
 
     h, w = board_image.shape[:2]
     gray = cv2.cvtColor(board_image, cv2.COLOR_BGR2GRAY)

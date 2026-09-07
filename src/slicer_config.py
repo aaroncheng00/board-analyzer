@@ -53,6 +53,55 @@ class SlicerConfig:
                                         # within this fraction of board size
                                         # get merged into one
     cluster_gap_min: int = 4           # floor for the above, in pixels
+    # --- grid detection strategy ---
+    grid_detector: str = "profile"     # "profile" or "hough".
+                                        # hough looks for DRAWN gridlines, which
+                                        # chess_2 does not have -- its squares
+                                        # differ only in wood shade. No hough
+                                        # parameter setting handles both chess
+                                        # boards: chess_1 needs a large
+                                        # max_line_gap_frac to bridge its
+                                        # fragmented lines, chess_2 needs a small
+                                        # one or grain gets stitched into lines.
+                                        # "profile" keys on periodicity instead
+                                        # and handles all three boards. Kept
+                                        # switchable so the two stay comparable
+    profile_n_min: int = 3             # cell-count search range
+    profile_n_max: int = 20
+    profile_peak_tol: int = 2          # px window when sampling a predicted
+                                        # boundary, for rounding/anti-aliasing
+    profile_percentile: float = 20.0   # how the per-boundary strengths are
+                                        # aggregated into one score for a
+                                        # candidate N. 100 = max, 50 = median,
+                                        # 0 = min.
+                                        # mean and min both fail: mean scores a
+                                        # single bright line at 0.33 (it averages
+                                        # one real hit with empty predictions, so
+                                        # a non-grid passes), while min picks 3
+                                        # instead of 6 on tango_1 columns, where
+                                        # the weakest genuine boundary sits at
+                                        # 86% of the mean. The 20th percentile
+                                        # tolerates a weak boundary or two and
+                                        # still requires most predictions to
+                                        # land on something real
+    profile_min_score: float = 0.20    # best-N score below this means no grid.
+                                        # Needed because when every score is ~0
+                                        # the largest-N rule returns
+                                        # profile_n_max, which is how a single
+                                        # bright line was passing as a grid
+    profile_rel_threshold: float = 0.90 # take the LARGEST N scoring within this
+                                        # fraction of the best. Divisors of the
+                                        # true N tie exactly (their boundaries
+                                        # are a genuine subset); multiples score
+                                        # lower by adding weak midpoints
+    profile_min_contrast: float = 5.0  # peak/median of the RAW profile. Below
+                                        # this the image has no grid signal and
+                                        # detection raises instead of returning
+                                        # profile_n_max, which is what it would
+                                        # otherwise do on a blank image.
+                                        # Real boards measure 36-547; uniform
+                                        # images measure ~1
+
     uniform_spacing: bool = True       # respace the detected lines evenly once
                                         # their COUNT is known, instead of
                                         # trusting individual positions. A

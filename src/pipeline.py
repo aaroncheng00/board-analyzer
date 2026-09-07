@@ -115,8 +115,7 @@ def contact_sheet(result, tile=120):
                 cv2.resize(crop, (tile, tile))
         label = result.labels[(r, c)] or "EMPTY"
         conf = result.confidences[(r, c)]
-        # low-confidence cells in red; see the note in main() about why this is
-        # a display cue only and not a correctness signal
+        # low-confidence cells in red
         color = (0, 0, 200) if conf < 0.5 else (0, 0, 0)
         cv2.putText(sheet, label[:16], (x0 + pad, y0 + pad + tile + 12),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.34, color, 1, cv2.LINE_AA)

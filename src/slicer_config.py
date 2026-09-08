@@ -97,11 +97,40 @@ class SlicerConfig:
                                         # tolerates a weak boundary or two and
                                         # still requires most predictions to
                                         # land on something real
-    profile_min_score: float = 0.20    # best-N score below this means no grid.
+    profile_max_inset_frac: float = 0.05 # the grid may sit this far inside the
+                                        # crop at either end. find_board_bbox
+                                        # finds the board INCLUDING any frame:
+                                        # checkers_1's wooden frame leaves the
+                                        # real grid at 24..1159 of a 1184px
+                                        # crop, so assuming it spans the full
+                                        # crop gives 148px cells where the truth
+                                        # is 142. This bound also stops a small
+                                        # N cheating -- with the offset fully
+                                        # free, N=3 finds a lucky placement on
+                                        # every board. 0.02-0.08 all work; 0.12
+                                        # breaks queens_1 columns
+    profile_inset_step: int = 2        # px granularity of the coarse sweep
+    profile_refine_px: int = 8         # +/- window for the asymmetric refine
+                                        # after the symmetric coarse pass
+    profile_norm_percentile: float = 99.0 # ceiling used to normalise the
+                                        # profile. NOT the max: one strong edge
+                                        # -- a board frame, a UI highlight --
+                                        # otherwise squashes every real
+                                        # gridline. Both checkers boards scored
+                                        # 0.19 against a 0.20 threshold for
+                                        # exactly this reason; at p99 they score
+                                        # 1.00
+    profile_min_score: float = 0.50    # best-N score below this means no grid.
                                         # Needed because when every score is ~0
                                         # the largest-N rule returns
                                         # profile_n_max, which is how a single
-                                        # bright line was passing as a grid
+                                        # bright line was passing as a grid.
+                                        # With p99 normalisation real boards
+                                        # score 0.96-1.00 and adversarial images
+                                        # that clear the contrast guard score
+                                        # <=0.20, so 0.50 sits in a wide gap --
+                                        # it was 0.20, one hundredth away from
+                                        # rejecting both checkers boards
     profile_rel_threshold: float = 0.90 # take the LARGEST N scoring within this
                                         # fraction of the best. Divisors of the
                                         # true N tie exactly (their boundaries

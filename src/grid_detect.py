@@ -64,25 +64,92 @@ def peak_tolerance(n_cells, span, tol_frac=0.04, tol_min=2):
     return max(tol_min, int(round(span / n_cells * tol_frac)))
 
 
-def score_grid(profile, n_cells, tol_frac=0.04, percentile=20.0, tol_min=2):
+def normalise(raw, percentile=99.0):
     """
-    How well a uniform division into `n_cells` explains the profile.
+    Scale a raw profile to 0..1 using a high percentile as the ceiling.
 
-    Samples the profile at each of the n_cells-1 interior boundaries used by a
-    uniform grid, taking the max within a window scaled to cell size (see
-    peak_tolerance), then aggregates with `percentile`.
+    Not the max. A single strong edge -- a board frame, a UI selection
+    highlight -- otherwise sets the ceiling and squashes every genuine gridline
+    beneath it. Both checkers boards scored 0.19 against a 0.20 threshold purely
+    because their wooden frame edge was ~5x stronger than their gridlines; at
+    the 99th percentile they score 1.00.
+    """
+    top = float(np.percentile(raw, percentile))
+    lo = float(raw.min())
+    return np.clip((raw - lo) / (top - lo + 1e-9), 0.0, 1.0)
+
+
+def score_grid(profile, n_cells, lo=None, hi=None, tol_frac=0.04,
+               percentile=20.0, tol_min=2):
+    """
+    How well a grid of `n_cells` spanning lo..hi explains the profile.
+
+    Iterate over possible lo/hi values since grid may not fill the bounding box.
+
+    Samples the profile at each of the n_cells-1 interior boundaries, taking the
+    max within a window scaled to cell size (see peak_tolerance), then
+    aggregates with `percentile`.
 
     `profile` should be normalised to 0..1 so scores are comparable across axes.
     """
     n = len(profile)
     if n_cells < 2:
         return 0.0
-    tol = peak_tolerance(n_cells, n, tol_frac, tol_min)
+    lo = 0 if lo is None else lo
+    hi = n if hi is None else hi
+    if hi - lo < n * 0.5:
+        return 0.0
+    cell = (hi - lo) / n_cells
+    tol = peak_tolerance(n_cells, hi - lo, tol_frac, tol_min)
     peaks = []
     for i in range(1, n_cells):
-        b = int(round(i * n / n_cells))
+        b = int(round(lo + i * cell))
         peaks.append(profile[max(0, b - tol):min(n, b + tol + 1)].max())
     return float(np.percentile(peaks, percentile))
+
+
+def fit_axis_grid(profile, config=None):
+    """
+    Fit (n_cells, lo, hi) -- how many cells, and where the grid sits.
+
+    Searched in two stages:
+
+      1. symmetric coarse pass, hi = n - lo.
+      2. small asymmetric search around the winner, for borders that are
+         not symmetric.
+
+    Returns (best_n, best_lo, best_hi, scores) where scores maps n -> its best
+    score over all offsets, for the divisor tie-break and for reporting.
+    """
+    cfg = config or SlicerConfig()
+    n = len(profile)
+    max_inset = int(n * cfg.profile_max_inset_frac)
+    step = max(1, cfg.profile_inset_step)
+    refine = cfg.profile_refine_px
+
+    def sc(nc, lo, hi):
+        return score_grid(profile, nc, lo, hi, cfg.profile_peak_tol_frac,
+                          cfg.profile_percentile, cfg.profile_peak_tol_min)
+
+    scores, spans = {}, {}
+    for nc in range(cfg.profile_n_min, cfg.profile_n_max + 1):
+        best = None
+        for inset in range(0, max_inset + 1, step):
+            v = sc(nc, inset, n - inset)
+            if best is None or v > best[0]:
+                best = (v, inset, n - inset)
+        _, lo0, hi0 = best
+        for lo in range(max(0, lo0 - refine), lo0 + refine + 1, step):
+            for hi in range(max(0, hi0 - refine), min(n, hi0 + refine) + 1, step):
+                v = sc(nc, lo, hi)
+                if v > best[0]:
+                    best = (v, lo, hi)
+        scores[nc], spans[nc] = best[0], (best[1], best[2])
+
+    # Divisor tie-break
+    cutoff = cfg.profile_rel_threshold * max(scores.values())
+    best_n = max(nc for nc, v in scores.items() if v >= cutoff)
+    return (best_n,) + spans[best_n] + (scores,)
 
 
 def infer_axis_size(board_image, axis, config=None):
@@ -107,15 +174,11 @@ def infer_axis_size(board_image, axis, config=None):
             f"likely has neither shade alternation nor drawn gridlines."
         )
 
-    profile = (raw - raw.min()) / (raw.max() - raw.min() + 1e-9)
-    scores = {
-        n: score_grid(profile, n, cfg.profile_peak_tol_frac,
-                      cfg.profile_percentile, cfg.profile_peak_tol_min)
-        for n in range(cfg.profile_n_min, cfg.profile_n_max + 1)
-    }
+    profile = normalise(raw, cfg.profile_norm_percentile)
+    n_cells, lo, hi, scores = fit_axis_grid(profile, cfg)
 
     # The contrast guard above only rejects flat images.
-    best_score = max(scores.values())
+    best_score = scores[n_cells]
     if best_score < cfg.profile_min_score:
         name = "rows" if axis == 0 else "columns"
         raise GridDetectionError(
@@ -125,8 +188,7 @@ def infer_axis_size(board_image, axis, config=None):
             f"spaced -- a single strong edge looks like this."
         )
 
-    cutoff = cfg.profile_rel_threshold * best_score
-    return max(n for n, s in scores.items() if s >= cutoff), scores
+    return n_cells, lo, hi, scores
 
 
 def infer_grid_size(board_image, config=None):
@@ -136,9 +198,9 @@ def infer_grid_size(board_image, config=None):
     Axes are inferred independently, so non-square NxM grids work.
     """
     cfg = config or SlicerConfig()
-    rows, _ = infer_axis_size(board_image, 0, cfg)
-    cols, _ = infer_axis_size(board_image, 1, cfg)
-    return rows, cols
+    rows, r_lo, r_hi, _ = infer_axis_size(board_image, 0, cfg)
+    cols, c_lo, c_hi, _ = infer_axis_size(board_image, 1, cfg)
+    return rows, cols, (r_lo, r_hi), (c_lo, c_hi)
 
 
 def detect_grid_lines_by_profile(board_image, config=None):
@@ -148,8 +210,8 @@ def detect_grid_lines_by_profile(board_image, config=None):
     Returns (row_lines, col_lines) spanning the full crop.
     """
     cfg = config or SlicerConfig()
-    h, w = board_image.shape[:2]
-    rows, cols = infer_grid_size(board_image, cfg)
-    row_lines = [int(round(v)) for v in np.linspace(0, h, rows + 1)]
-    col_lines = [int(round(v)) for v in np.linspace(0, w, cols + 1)]
+    rows, cols, (r_lo, r_hi), (c_lo, c_hi) = infer_grid_size(board_image, cfg)
+    # spans the FITTED grid, not the whole crop -- see fit_axis_grid
+    row_lines = [int(round(v)) for v in np.linspace(r_lo, r_hi, rows + 1)]
+    col_lines = [int(round(v)) for v in np.linspace(c_lo, c_hi, cols + 1)]
     return row_lines, col_lines

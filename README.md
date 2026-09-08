@@ -30,7 +30,7 @@ NumPy 2.x, and `torch.from_numpy` fails.
 CONDA_SUBDIR=osx-arm64 conda create -n board_analyzer_arm python=3.11
 conda activate board_analyzer_arm
 conda config --env --set subdir osx-arm64          # keep future installs native
-pip install torch torchvision "opencv-python-headless<5"
+pip install -r requirements.txt
 ```
 
 Run everything from the repo root so the default data paths resolve.

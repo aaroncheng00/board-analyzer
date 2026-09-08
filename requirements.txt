@@ -1,0 +1,17 @@
+# pip install -r requirements.txt
+#
+# Requires a native arm64 Python on Apple Silicon (see README)
+
+torch>=2.13.0
+torchvision>=0.28.0
+
+# Must stay below 5. OpenCV 5 changed HoughLinesP's return shape from (N, 1, 4)
+# to (N, 4), which breaks the `hough` grid detector.
+opencv-python-headless>=4.14.0,<5
+
+numpy>=2.0
+Pillow>=11.0
+
+# Only needed to re-render assets/icons/*.svg to PNG via src/svg_to_png.py.
+# Not required to run the pipeline or train.
+resvg-py>=0.5.0

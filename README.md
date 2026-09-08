@@ -17,7 +17,6 @@ screenshot ──▶ find board border ──▶ infer grid lines ──▶ slic
 | Tango | 4 | 22 | yes |
 | Queens | 2 | 20 | no |
 | Checkers | 2 | 6 | no |
-| Go | 2 | 4 | no |
 
 Plus `empty` and ten `digit_*` classes.
 

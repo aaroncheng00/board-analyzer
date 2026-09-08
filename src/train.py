@@ -61,20 +61,38 @@ def _config_from_args(args, config_cls):
 
 def load_datasets(train_root, val_root, model_cfg):
     """
-    ImageFolder for both splits, sharing model.py's deterministic transform.
+    ImageFolder for the train split, and for val when it is usable.
+
+    Validation is optional. It is skipped, with a printed reason, when the val
+    root is missing or its class set does not match train's. 
+    
+    Returns (train_ds, val_ds_or_None).
     """
     transform = build_eval_transform(model_cfg)
     train_ds = datasets.ImageFolder(train_root, transform=transform)
-    val_ds = datasets.ImageFolder(val_root, transform=transform)
+
+    if not os.path.isdir(val_root):
+        print(f"NOTE     no validation: {val_root} does not exist\n")
+        return train_ds, None
+
+    try:
+        val_ds = datasets.ImageFolder(val_root, transform=transform)
+    except (FileNotFoundError, RuntimeError) as exc:
+        print(f"NOTE     no validation: could not load {val_root} ({exc})\n")
+        return train_ds, None
 
     if train_ds.classes != val_ds.classes:
         only_train = sorted(set(train_ds.classes) - set(val_ds.classes))
         only_val = sorted(set(val_ds.classes) - set(train_ds.classes))
-        raise ValueError(
-            "train and val class sets differ, so their label indices do not "
-            f"agree.\n  only in {train_root}: {only_train}\n"
-            f"  only in {val_root}: {only_val}"
-        )
+        print(f"NOTE     no validation: train and val class sets differ, so their "
+              f"label indices do not agree.")
+        if only_train:
+            print(f"           only in {train_root}: {only_train}")
+        if only_val:
+            print(f"           only in {val_root}: {only_val}")
+        print(f"         training continues; add the missing folders to validate again\n")
+        return train_ds, None
+
     return train_ds, val_ds
 
 
@@ -235,7 +253,8 @@ def main():
     print(f"arch          {model_cfg.arch} @ {model_cfg.input_size}px  "
           f"(feature dim {feature_dim})")
     print(f"classes       {len(train_ds.classes)}")
-    print(f"images        {len(train_ds)} train / {len(val_ds)} val")
+    print(f"images        {len(train_ds)} train / "
+          f"{len(val_ds) if val_ds is not None else 'no'} val")
     print(f"trainable     {sum(p.numel() for p in trainable):,} params "
           f"of {sum(p.numel() for p in model.parameters()):,}")
     print(f"cached feats  {train_cfg.cache_features}")
@@ -243,29 +262,38 @@ def main():
     print(f"overrides     {overrides if overrides else 'none (all defaults)'}")
     print()
 
-    warn_split_imbalance(train_ds, val_ds)
+    if val_ds is not None:
+        warn_split_imbalance(train_ds, val_ds)
 
     # With cached features the head trains directly on backbone outputs, so the
     # module passed to run_epoch is model.head rather than the whole model
     if train_cfg.cache_features:
         train_data = extract_features(model, train_ds, train_cfg.batch_size, device)
-        val_data = extract_features(model, val_ds, train_cfg.batch_size, device)
+        val_data = (extract_features(model, val_ds, train_cfg.batch_size, device)
+                    if val_ds is not None else None)
         module = model.head
     else:
         train_data, val_data, module = train_ds, val_ds, model
 
     train_loader = DataLoader(train_data, batch_size=train_cfg.batch_size, shuffle=True)
-    val_loader = DataLoader(val_data, batch_size=train_cfg.batch_size, shuffle=False)
+    val_loader = (DataLoader(val_data, batch_size=train_cfg.batch_size, shuffle=False)
+                  if val_data is not None else None)
 
     for epoch in range(1, train_cfg.epochs + 1):
         train_loss, train_acc = run_epoch(module, train_loader, loss_fn, device, optimizer)
-        val_loss, val_acc = run_epoch(module, val_loader, loss_fn, device)
         if epoch % max(1, train_cfg.epochs // 20) == 0 or epoch == train_cfg.epochs:
-            print(f"  epoch {epoch:>4}/{train_cfg.epochs}   "
-                  f"loss {train_loss:.4f}   train_acc {train_acc:.3f}   "
-                  f"val_loss {val_loss:.4f}   val_acc {val_acc:.3f}")
+            line = (f"  epoch {epoch:>4}/{train_cfg.epochs}   "
+                    f"loss {train_loss:.4f}   train_acc {train_acc:.3f}")
+            if val_loader is not None:
+                val_loss, val_acc = run_epoch(module, val_loader, loss_fn, device)
+                line += f"   val_loss {val_loss:.4f}   val_acc {val_acc:.3f}"
+            print(line)
 
-    per_class_report(module, val_loader, train_ds.classes, device)
+    if val_loader is not None:
+        per_class_report(module, val_loader, train_ds.classes, device)
+    else:
+        print("\nno per-class report -- validation was skipped. Score held-out "
+              "boards with pipeline.py instead; that measures the real task.")
 
     save_checkpoint(train_cfg.out_path, model, train_ds.classes, model_cfg)
     print(f"\nsaved checkpoint -> {train_cfg.out_path}")

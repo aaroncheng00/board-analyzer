@@ -1,0 +1,8 @@
+# pip install -r requirements-api.txt
+#
+# Only needed to serve the web UI in web/. Separate from
+# requirements.txt since the CLI and training do not need a web framework.
+
+fastapi>=0.115
+uvicorn[standard]>=0.30
+python-multipart>=0.0.9      # FastAPI needs this to parse multipart uploads

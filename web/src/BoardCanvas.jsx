@@ -1,9 +1,9 @@
 import { useEffect, useRef } from 'react'
 import { VIEW } from './views.js'
+import { STYLE } from './canvasStyle.js'
 
 const GAMES = ['chess', 'tango', 'queens', 'checkers', 'go']
 const COLOURS = ['black', 'white', 'red']
-const FONT = 'ui-monospace, SFMono-Regular, Menlo, monospace'
 
 // 'chess_black_bishop' -> 'b_bishop'
 // Remove game names from labels
@@ -21,7 +21,7 @@ export function shortLabel(name) {
 // the boards run from pale wood to near-black.
 function outlined(ctx, text, x, y, font, fill) {
   ctx.font = font
-  ctx.strokeStyle = 'rgba(0, 0, 0, 0.85)'
+  ctx.strokeStyle = STYLE.textOutline
   ctx.strokeText(text, x, y)
   ctx.fillStyle = fill
   ctx.fillText(text, x, y)
@@ -33,7 +33,7 @@ function drawGrid(ctx, data) {
   const [x0, x1] = [cl[0], cl[cl.length - 1]]
   const [y0, y1] = [rl[0], rl[rl.length - 1]]
 
-  ctx.strokeStyle = 'rgba(56, 189, 248, 0.9)'
+  ctx.strokeStyle = STYLE.gridLine
   ctx.lineWidth = Math.max(1, Math.round(Math.min(x1 - x0, y1 - y0) / 400))
   ctx.beginPath()
   for (const y of rl) { ctx.moveTo(x0, y + 0.5); ctx.lineTo(x1, y + 0.5) }
@@ -45,7 +45,7 @@ function drawGrid(ctx, data) {
 function fitFont(ctx, texts, cellW, start) {
   let size = start
   for (const text of texts) {
-    ctx.font = `600 ${size}px ${FONT}`
+    ctx.font = `${STYLE.weight} ${size}px ${STYLE.font}`
     const width = ctx.measureText(text).width
     if (width > cellW * 0.92) size *= (cellW * 0.92) / width
   }
@@ -74,9 +74,10 @@ function drawLabels(ctx, data) {
       if (!name || name === 'empty') continue
       const cx = (cl[c] + cl[c + 1]) / 2
       const cy = (rl[r] + rl[r + 1]) / 2
-      outlined(ctx, shortLabel(name), cx, cy, `600 ${size}px ${FONT}`, '#ffffff')
+      outlined(ctx, shortLabel(name), cx, cy,
+               `${STYLE.weight} ${size}px ${STYLE.font}`, STYLE.labelFill)
       outlined(ctx, confidences[r][c].toFixed(2), cx, cy + size * 1.2,
-               `${size * 0.85}px ${FONT}`, '#86efac')
+               `${size * 0.85}px ${STYLE.font}`, STYLE.confidenceFill)
     }
   }
 }

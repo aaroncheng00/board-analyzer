@@ -2,9 +2,6 @@ import { useRef, useState } from 'react'
 import BoardCanvas from './BoardCanvas.jsx'
 import { TABS, VIEW } from './views.js'
 
-// The API answers a failure with 422 and {"error": ...}; both the bbox and the
-// grid-detection errors already carry specific diagnostic text, so it goes on
-// screen unchanged.
 async function post(path, file) {
   const body = new FormData()
   body.append('file', file)
@@ -24,8 +21,7 @@ export default function App() {
   const [view, setView] = useState(VIEW.LABELS)
   const picker = useRef(null)
 
-  // Both requests share a shape: flip the busy flag, run, put any failure on the
-  // error line. Naming it once leaves each handler showing only what it does.
+  // Flip the busy flag, run, put any failure on the error line
   async function guard(fn) {
     setBusy(true)
     try {

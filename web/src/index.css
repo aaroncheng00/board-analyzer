@@ -48,6 +48,7 @@ button {
 button:hover:not(:disabled) { background: #f4f4f5; }
 button:disabled { opacity: 0.5; cursor: default; }
 button.active { background: #1a1a1a; border-color: #1a1a1a; color: #fff; }
+button.active:hover:not(:disabled) { background: #333; border-color: #333; }
 
 .tabs { display: flex; gap: 0.25rem; }
 

@@ -1,5 +1,7 @@
 # board_analyzer
 
+https://board-analyzer-delta.vercel.app/
+
 Read a board game screenshot and return a labeled grid of what is on each square.
 
 Given a screenshot, the pipeline locates the board, infers the
@@ -11,14 +13,10 @@ screenshot ──▶ find board border ──▶ infer grid lines ──▶ slic
 
 ## Supported games
 
-| game | classes | training images | end-to-end tested |
-|---|---|---|---|
-| Chess | 12 | 131 | yes |
-| Tango | 4 | 22 | yes |
-| Queens | 2 | 20 | no |
-| Checkers | 2 | 6 | no |
-
-Plus `empty` and ten `digit_*` classes.
+- Chess
+- Tango
+- Queens
+- Checkers
 
 ## Setup
 
@@ -74,12 +72,15 @@ A frozen ImageNet backbone with a small trainable head.
 Swapping backbones is one config field.
 The feature width is measured with a dummy forward pass rather than hardcoded.
 
+`C` is set by however many class folders sit in `data/train/cells/`, so the head is resized on
+every retrain and the class list travels in the checkpoint.
+
 ```
-shufflenet_v2_x0_5   ImageNet weights, FROZEN        341,792 params
-  └── head           Dropout(0.2) → Linear(1024, 33)  33,825 params  ← the only trainable part
+shufflenet_v2_x0_5   ImageNet weights, FROZEN       341,792 params
+  └── head           Dropout(0.2) → Linear(1024, C)  the only trainable part
 
 input      128×128 RGB   (board cells are ~90-180px, so 224 would just upscale)
-output     33 logits     softmax applied at inference only, not in the model
+output     C logits      softmax applied at inference only, not in the model
 latency    ~257 ms for a 64-cell board (CPU); faster on MPS
 ```
 

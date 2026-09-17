@@ -23,8 +23,9 @@ app = modal.App("board-analyzer", image=image)
 
 
 @app.function(
-    memory=1024,          
+    memory=1024,
     scaledown_window=300,
+    max_containers=3,
 )
 @modal.concurrent(max_inputs=4)
 @modal.asgi_app()

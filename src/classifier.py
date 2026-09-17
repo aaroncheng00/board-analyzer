@@ -58,10 +58,9 @@ class CellClassifier:
                 f"{path}: checkpoint version {ckpt.get('version')!r}, expected "
                 f"{CHECKPOINT_VERSION}. Retrain with the current train.py."
             )
-
-        model_cfg = ModelConfig(**ckpt["model_cfg"])
+        model_cfg = ModelConfig(**{**ckpt["model_cfg"], "pretrained": False})
         model, _ = build_model(model_cfg, len(ckpt["classes"]))
-        model.load_state_dict(ckpt["state_dict"])
+        model.load_state_dict(ckpt["state_dict"], strict=True)
         model.to(device)
         model.eval()
 

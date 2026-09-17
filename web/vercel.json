@@ -2,7 +2,7 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://REPLACE-WITH-MODAL-URL/api/:path*"
+      "destination": "https://aaroncheng00--board-analyzer-fastapi-app.modal.run/api/:path*"
     }
   ]
 }

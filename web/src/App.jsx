@@ -63,6 +63,9 @@ export default function App() {
         Upload a board screenshot. The pipeline finds the board, infers the grid, and
         classifies each cell.
       </p>
+      <p className="sub">
+        Supported games: chess, checkers, tango, and queens.
+      </p>
 
       <div className="controls">
         <input

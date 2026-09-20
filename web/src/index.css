@@ -17,14 +17,16 @@ body {
 h1 {
   font-size: 1.1rem;
   font-weight: 600;
-  margin: 0 0 0.25rem;
+  margin: 0 0 0.75rem;
 }
 
 .sub {
   color: #6b7280;
   font-size: 0.85rem;
-  margin: 0 0 1.5rem;
+  margin: 0 0 0.4rem;
 }
+
+.sub + .sub { margin-bottom: 1.5rem; }
 
 .controls {
   display: flex;

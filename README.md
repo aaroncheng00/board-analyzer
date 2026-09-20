@@ -62,6 +62,8 @@ result.label_grid()             # list of lists, row-major
 `analyze_board` prints nothing and returns a `BoardResult`, so it is safe to call from a loop.
 
 To retrain: drop cell images into `data/train/cells/<class>/` and run `python3 src/train.py`.
+If `assets/icons/` was changed, run `python3 src/generate_composites.py --clean` to regenerate
+fresh composites for each icon. They are gitignored, so a fresh clone needs this too.
 Every `SlicerConfig`, `ModelConfig` and `TrainConfig` field is exposed as a CLI flag
 automatically.
 Use `--help` on any script for more info.

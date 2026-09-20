@@ -10,7 +10,7 @@ Usage:
     preds = clf.predict(cells)          # {(r, c): (label, confidence)}
 
 Or from the command line, to sanity-check a checkpoint:
-    python3 src/classifier.py models/board_cnn.pt data/val/cells/empty/*.png
+    python3 src/classifier.py models/board_cnn.pt data/train/cells/empty/*.png
 """
 
 import torch
@@ -111,7 +111,7 @@ class CellClassifier:
 # ---------------------------------------------------------------------------
 # Standalone check: classify some image files with a checkpoint.
 #
-#   python3 src/classifier.py models/board_cnn.pt data/val/cells/empty/*.png
+#   python3 src/classifier.py models/board_cnn.pt data/train/cells/empty/*.png
 # ---------------------------------------------------------------------------
 def main():
     import argparse

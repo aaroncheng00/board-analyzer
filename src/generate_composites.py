@@ -58,6 +58,7 @@ _EXPLICIT = {
     "crown_gold.png": "queens_gold_crown",
     "crown_gold_2.png": "queens_gold_crown",
     "crown_black.png": "queens_black_crown",
+    "crown_linkedin_gold.png": "queens_gold_crown",
 }
 
 

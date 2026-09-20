@@ -29,7 +29,9 @@ from model import (
 )
 
 DEFAULT_TRAIN_ROOT = "data/train/cells"
-DEFAULT_VAL_ROOT = "data/val/cells"
+
+# No validation split by default
+DEFAULT_VAL_ROOT = ""
 
 
 # ---------------------------------------------------------------------------
@@ -70,6 +72,10 @@ def load_datasets(train_root, val_root, model_cfg):
     """
     transform = build_eval_transform(model_cfg)
     train_ds = datasets.ImageFolder(train_root, transform=transform)
+
+    if not val_root:
+        print("NOTE     no validation: disabled by default, see DEFAULT_VAL_ROOT.\n")
+        return train_ds, None
 
     if not os.path.isdir(val_root):
         print(f"NOTE     no validation: {val_root} does not exist\n")
